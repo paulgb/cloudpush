@@ -7,6 +7,7 @@ from os import path
 import string
 from tempfile import gettempprefix
 import json
+from urlparse import urlparse
 
 class CloudFilesTest(unittest.TestCase):
     def random_container_name(self):
@@ -36,11 +37,27 @@ class CloudFilesTest(unittest.TestCase):
         url = self.client.publish()
         assert url, 'URL should not be empty'
 
-        #self.client.push(['file.txt'])
-        self.client.push()
-        print self.client.url(['file.txt'])
+        res = self.client.push(['file.txt'])
 
-        # Detach
+        self.assertEquals({'skipped': 0, 'synced': 1, 'total': 1}, res)
+
+        res = self.client.push()
+        
+        self.assertEquals({'skipped': 1, 'synced': 2, 'total': 3}, res)
+
+        res = self.client.push()
+
+        self.assertEquals({'skipped': 3, 'synced': 0, 'total': 3}, res)
+
+        res = self.client.url(['file.txt'])
+        self.assertEquals('/file.txt', urlparse(res).path)
+
+        res = self.client.url(['some_dir'])
+        self.assertEquals('/some_dir', urlparse(res).path)
+
+        res = self.client.url(['some_dir/test.html'])
+        self.assertEquals('/some_dir/test.html', urlparse(res).path)
+
         self.client.detach()
 
         try:

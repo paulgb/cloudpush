@@ -5,9 +5,11 @@ from os import environ, path, walk, chdir
 import json
 from cloudfiles.errors import ContainerNotPublic
 from StringIO import StringIO
+from hashlib import md5
 
 COMMANDS = ('info', 'attach', 'url', 'publish', 'push')
 CONF_OPTS = ('username', 'api_key', 'cache_timeout', 'authurl')
+MD5_BLOCKSIZE = 128
 
 CONFIG_FILE = '.cloudpush'
 BASE_CONFIG_FILE = path.expanduser(path.join('~', CONFIG_FILE))
@@ -20,13 +22,19 @@ def all_files(base):
             if filename[0] != '.':
                 yield path.relpath(path.join(dirname, filename))
 
+def md5_file(filename):
+    hash = md5()
+    fh = file(filename)
+    while True:
+        chunk = fh.read(MD5_BLOCKSIZE * 128)
+        if len(chunk) == 0:
+            break
+        hash.update(chunk)
+    return hash.hexdigest()
+
 class NotAttached(Exception):
     def __str__(self):
         print 'not attached'
-
-class BadArgumentsError(Exception):
-    def __str__(self):
-        print 'bad arguments'
 
 class InvalidConfigurationError(Exception):
     def __str__(self):
@@ -78,18 +86,23 @@ class CloudFilesClient(object):
             raise NotAttached()
 
     def url(self, files=['.']):
+        filename, = files
         try:
-            filename, = files
-        except ValueError:
-            raise BadArgumentsError()
-
-        try:
-            return self.container.public_uri()
+            if path.isdir(filename):
+                if filename == '.':
+                    return self.container.public_uri()
+                else:
+                    return path.join(self.container.public_uri(), filename)
+            else:
+                return self.container[filename].public_uri()
         except ContainerNotPublic:
             raise
 
     def push(self, files=['.']):
+        skipped = 0
+        synced = 0
         container = self.container
+        objects = dict((v['name'], v) for v in container.list_objects_info())
         for push_path in files:
             if path.isdir(push_path):
                 push_files = all_files(push_path)
@@ -97,8 +110,17 @@ class CloudFilesClient(object):
                 push_files = [push_path]
 
             for filename in push_files:
+                if filename in objects:
+                    remote_hash = objects[filename]['hash']
+                    local_hash = md5_file(filename)
+                    if local_hash == remote_hash:
+                        skipped += 1
+                        continue
+
+                synced += 1
                 ob = container.create_object(filename)
                 ob.load_from_filename(filename)
+        return {'skipped': skipped, 'synced': synced, 'total': skipped+synced}
          
     def detach(self):
         site_config = self.site_config
