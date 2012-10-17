@@ -7,7 +7,7 @@ from cloudfiles.errors import ContainerNotPublic
 from StringIO import StringIO
 from hashlib import md5
 
-COMMANDS = ('info', 'attach', 'url', 'publish', 'push')
+COMMANDS = []
 CONF_OPTS = ('username', 'api_key', 'cache_timeout', 'authurl')
 MD5_BLOCKSIZE = 128
 
@@ -16,22 +16,6 @@ BASE_CONFIG_FILE = path.expanduser(path.join('~', CONFIG_FILE))
 DEFAULT_CACHE_TIMEOUT = 10 * 60
 DEFAULT_AUTH_URL = cloudfiles.us_authurl
 
-def all_files(base):
-    for dirname, dirs, files in walk(base):
-        for filename in files:
-            if filename[0] != '.':
-                yield path.relpath(path.join(dirname, filename))
-
-def md5_file(filename):
-    hash = md5()
-    fh = file(filename)
-    while True:
-        chunk = fh.read(MD5_BLOCKSIZE * 128)
-        if len(chunk) == 0:
-            break
-        hash.update(chunk)
-    return hash.hexdigest()
-
 class NotAttached(Exception):
     def __str__(self):
         print 'not attached'
@@ -39,6 +23,10 @@ class NotAttached(Exception):
 class InvalidConfigurationError(Exception):
     def __str__(self):
         print 'invalid configuration'
+
+def command(fun):
+    COMMANDS.append(fun.func_name)
+    return fun
 
 class CloudFilesClient(object):
     _conn = None
@@ -85,6 +73,7 @@ class CloudFilesClient(object):
         except KeyError:
             raise NotAttached()
 
+    @command
     def url(self, files=['.']):
         filename, = files
         try:
@@ -98,6 +87,7 @@ class CloudFilesClient(object):
         except ContainerNotPublic:
             raise
 
+    @command
     def push(self, files=['.']):
         skipped = 0
         synced = 0
@@ -122,6 +112,7 @@ class CloudFilesClient(object):
                 ob.load_from_filename(filename)
         return {'skipped': skipped, 'synced': synced, 'total': skipped+synced}
          
+    @command
     def detach(self):
         site_config = self.site_config
         container = self.container
@@ -131,6 +122,7 @@ class CloudFilesClient(object):
         del site_config['container']
         self.save_site_config()
 
+    @command
     def attach(self, container=None):
         site_config = self.site_config
         
@@ -151,40 +143,42 @@ class CloudFilesClient(object):
         except cloudfiles.errors.ContainerExists:
             print 'Container %s already exists' % site_config['container']
 
+    @command
     def publish(self):
         container = self.container
 
         container.make_public(ttl=self.cache_timeout)
         return self.url()
 
-    def info(self, friendly=False):
+    @command
+    def info(self):
         connection = self.connection
-        out = StringIO()
-        for container in connection.list_containers_info():
-            print >> out, container['name']
-            print >> out, '    %s objects' % container['count']
-            if friendly:
-                print >> out, '    %s' % friendly_size(container['bytes'])
-            else:
-                print >> out, '    %s' % container['bytes']
-        return out
+        return {'url': connection.connection_args,
+                'cdn_url': connection.cdn_url,
+                'token': connection.token}
+
+    @command
+    def metadata(self):
+        container = self.container
+        print dir(container)
+        return container.metadata
+
+def all_files(base):
+    for dirname, dirs, files in walk(base):
+        for filename in files:
+            if filename[0] != '.':
+                yield path.relpath(path.join(dirname, filename))
 
 
-def friendly_size(size):
-    r'''
-        >>> friendly_size(1024)
-        '1.0 KB'
-        >>> friendly_size(128)
-        '128.0 bytes'
-        >>> friendly_size(1024 * 8.3)
-        '8.3 KB'
-        >>> friendly_size(1024 * 1024 * 5.5)
-        '5.5 MB'
-    '''
-    for unit in ['bytes','KB','MB','GB','TB']:
-        if size < 1024.0:
-            return "%3.1f %s" % (size, unit)
-        size /= 1024.0
+def md5_file(filename):
+    hash = md5()
+    fh = file(filename)
+    while True:
+        chunk = fh.read(MD5_BLOCKSIZE * 128)
+        if len(chunk) == 0:
+            break
+        hash.update(chunk)
+    return hash.hexdigest()
 
 
 def clean_opts(opts):
@@ -198,8 +192,6 @@ def clean_opts(opts):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=COMMANDS)
-    parser.add_argument('--friendly', '-f', action='store_const', const=True,
-            help='Human-friendly file sizes')
     parser.add_argument('--container', '-c')
     parser.add_argument('files', nargs='*')
 
