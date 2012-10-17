@@ -1,8 +1,10 @@
 
 import cloudfiles
 import argparse
-from os import environ, path
+from os import environ, path, walk, chdir
 import json
+from cloudfiles.errors import ContainerNotPublic
+from StringIO import StringIO
 
 COMMANDS = ('info', 'attach', 'url', 'publish', 'push')
 CONF_OPTS = ('username', 'api_key', 'cache_timeout', 'authurl')
@@ -12,16 +14,35 @@ BASE_CONFIG_FILE = path.expanduser(path.join('~', CONFIG_FILE))
 DEFAULT_CACHE_TIMEOUT = 10 * 60
 DEFAULT_AUTH_URL = cloudfiles.us_authurl
 
+def all_files(base):
+    for dirname, dirs, files in walk(base):
+        for filename in files:
+            if filename[0] != '.':
+                yield path.relpath(path.join(dirname, filename))
+
+class NotAttached(Exception):
+    def __str__(self):
+        print 'not attached'
+
+class BadArgumentsError(Exception):
+    def __str__(self):
+        print 'bad arguments'
+
+class InvalidConfigurationError(Exception):
+    def __str__(self):
+        print 'invalid configuration'
+
 class CloudFilesClient(object):
     _conn = None
+    _site_config = None
 
-    def __init__(self, config):
+    def __init__(self, config, sitedir='.'):
+        chdir(sitedir)
         try:
             self.username = config['username']
             self.api_key = config['api_key']
         except KeyError:
-            print 'bad'
-            exit()
+            raise InvalidConfigurationError()
         self.cache_timeout = config.get('cache_timeout', DEFAULT_CACHE_TIMEOUT)
         self.auth_url = config.get('api_key', DEFAULT_AUTH_URL)
 
@@ -41,67 +62,91 @@ class CloudFilesClient(object):
         return self._site_config
 
     def save_site_config(self):
-        pass
+        fh = file(CONFIG_FILE, 'w')
+        json.dump(self.site_config, fh)
+        fh.close()
 
     @property
     def container(self):
-        return self.connection[self.site_config['container']]
+        return self.connection[self.container_name]
 
-    def url(self):
+    @property
+    def container_name(self):
         try:
-            print self.container.public_uri()
-        except cloudfiles.errors.ContainerNotPublic:
-            print 'not public'
+            return self.site_config['container']
+        except KeyError:
+            raise NotAttached()
 
-    def push(self):
+    def url(self, files=['.']):
+        try:
+            filename, = files
+        except ValueError:
+            raise BadArgumentsError()
+
+        try:
+            return self.container.public_uri()
+        except ContainerNotPublic:
+            raise
+
+    def push(self, files=['.']):
         container = self.container
-        files = args['files']
-        for filename in files:
-            print filename
-            ob = container.create_object(filename)
-            ob.load_from_filename(filename)
+        for push_path in files:
+            if path.isdir(push_path):
+                push_files = all_files(push_path)
+            else:
+                push_files = [push_path]
+
+            for filename in push_files:
+                ob = container.create_object(filename)
+                ob.load_from_filename(filename)
          
-    def attach(self):
-        config = self.config
+    def detach(self):
+        site_config = self.site_config
+        container = self.container
+        for obj in container.list_objects():
+            container.delete_object(obj)
+        self.connection.delete_container(self.container_name)
+        del site_config['container']
+        self.save_site_config()
+
+    def attach(self, container=None):
+        site_config = self.site_config
         
-        if 'container' in config:
-            print 'Already attached to %s' % config['container']
-            if args['container']:
+        if 'container' in site_config:
+            print 'Already attached to %s' % site_config['container']
+            if container:
                 raise NotImplementedError()
-            container_name = config['container']
-        elif args['container']:
-            container_name = args['container']
+            container_name = site_config['container']
+        elif container:
+            container_name = container
         else:
             parent_dir, container_name = path.split(path.realpath('.'))
-        config['container'] = container_name
-        print config
-
-        fh = file(CONFIG_FILE, 'w')
-        json.dump(config, fh)
+        site_config['container'] = container_name
+        self.save_site_config()
 
         try:
-            self.connection.create_container(config['container'], True)
+            self.connection.create_container(site_config['container'], True)
         except cloudfiles.errors.ContainerExists:
-            print 'Container already exists'
+            print 'Container %s already exists' % site_config['container']
 
     def publish(self):
-        config = self.config
-        connection = self.connection
-        container = config['container']
+        container = self.container
 
-        connection[container].make_public(ttl=self.cache_timeout)
-        self.url(args)
+        container.make_public(ttl=self.cache_timeout)
+        return self.url()
 
     def info(self, friendly=False):
         connection = self.connection
-        print 'Listing Containers:'
+        out = StringIO()
         for container in connection.list_containers_info():
-            print container['name']
-            print '    %s objects' % container['count']
+            print >> out, container['name']
+            print >> out, '    %s objects' % container['count']
             if friendly:
-                print '    %s' % friendly_size(container['bytes'])
+                print >> out, '    %s' % friendly_size(container['bytes'])
             else:
-                print '    %s' % container['bytes']
+                print >> out, '    %s' % container['bytes']
+        return out
+
 
 def friendly_size(size):
     r'''
@@ -119,12 +164,14 @@ def friendly_size(size):
             return "%3.1f %s" % (size, unit)
         size /= 1024.0
 
+
 def clean_opts(opts):
     r'''
         >>> clean_opts({'username': 'baz', 'foo': 'bar'})
         {'username': 'baz'}
     '''
     return dict((k,v) for k,v in opts.items() if k in CONF_OPTS and v is not None)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -145,7 +192,6 @@ def main():
     else:
         client_opts.update(clean_opts(config))
 
-    print args
     for opt in CONF_OPTS:
         try:
             val = args.pop(opt)
@@ -159,7 +205,7 @@ def main():
     command_fun = getattr(client, args.pop('command'))
     args = dict((k,v) for k,v in args.items() if v not in (None, []))
 
-    command_fun(**args)
+    print command_fun(**args)
 
 
 if __name__ == '__main__':
