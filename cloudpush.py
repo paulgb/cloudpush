@@ -4,8 +4,8 @@ import argparse
 from os import environ, path
 import json
 
-COMMANDS = ('info', 'attach', 'url', 'publish')
-OPTS = ('username', 'api_key', 'cache_timeout', 'authurl', 'friendly')
+COMMANDS = ('info', 'attach', 'url', 'publish', 'push')
+CONF_OPTS = ('username', 'api_key', 'cache_timeout', 'authurl')
 
 CONFIG_FILE = '.cloudpush'
 BASE_CONFIG_FILE = path.expanduser(path.join('~', CONFIG_FILE))
@@ -14,17 +14,16 @@ DEFAULT_AUTH_URL = cloudfiles.us_authurl
 
 class CloudFilesClient(object):
     _conn = None
-    _config = None
 
-    def __init__(self, opts):
+    def __init__(self, config):
         try:
-            self.username = opts['username']
-            self.api_key = opts['api_key']
+            self.username = config['username']
+            self.api_key = config['api_key']
         except KeyError:
             print 'bad'
             exit()
-        self.cache_timeout = opts.get('cache_timeout', DEFAULT_CACHE_TIMEOUT)
-        self.auth_url = opts.get('api_key', DEFAULT_AUTH_URL)
+        self.cache_timeout = config.get('cache_timeout', DEFAULT_CACHE_TIMEOUT)
+        self.auth_url = config.get('api_key', DEFAULT_AUTH_URL)
 
     @property
     def connection(self):
@@ -33,23 +32,36 @@ class CloudFilesClient(object):
         return self._conn
 
     @property
-    def config(self):
-        if self._config is None:
+    def site_config(self):
+        if self._site_config is None:
             try:
-                self._config = json.load(file(CONFIG_FILE))
+                self._site_config = json.load(file(CONFIG_FILE))
             except IOError:
-                self._config = {}
-        return self._config
+                self._site_config = {}
+        return self._site_config
 
-    def url(self, args):
-        config = self.config
-        container = self.config['container']
+    def save_site_config(self):
+        pass
+
+    @property
+    def container(self):
+        return self.connection[self.site_config['container']]
+
+    def url(self):
         try:
-            print self.connection[container].public_uri()
+            print self.container.public_uri()
         except cloudfiles.errors.ContainerNotPublic:
             print 'not public'
 
-    def attach(self, args):
+    def push(self):
+        container = self.container
+        files = args['files']
+        for filename in files:
+            print filename
+            ob = container.create_object(filename)
+            ob.load_from_filename(filename)
+         
+    def attach(self):
         config = self.config
         
         if 'container' in config:
@@ -72,7 +84,7 @@ class CloudFilesClient(object):
         except cloudfiles.errors.ContainerExists:
             print 'Container already exists'
 
-    def publish(self, args):
+    def publish(self):
         config = self.config
         connection = self.connection
         container = config['container']
@@ -80,13 +92,13 @@ class CloudFilesClient(object):
         connection[container].make_public(ttl=self.cache_timeout)
         self.url(args)
 
-    def info(self, args):
+    def info(self, friendly=False):
         connection = self.connection
         print 'Listing Containers:'
         for container in connection.list_containers_info():
             print container['name']
             print '    %s objects' % container['count']
-            if args['friendly']:
+            if friendly:
                 print '    %s' % friendly_size(container['bytes'])
             else:
                 print '    %s' % container['bytes']
@@ -112,14 +124,15 @@ def clean_opts(opts):
         >>> clean_opts({'username': 'baz', 'foo': 'bar'})
         {'username': 'baz'}
     '''
-    return dict((k,v) for k,v in opts.items() if k in OPTS and v is not None)
+    return dict((k,v) for k,v in opts.items() if k in CONF_OPTS and v is not None)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=COMMANDS)
-    parser.add_argument('--friendly', '-f', action='store_true',
+    parser.add_argument('--friendly', '-f', action='store_const', const=True,
             help='Human-friendly file sizes')
     parser.add_argument('--container', '-c')
+    parser.add_argument('files', nargs='*')
 
     args = vars(parser.parse_args())
 
@@ -132,10 +145,21 @@ def main():
     else:
         client_opts.update(clean_opts(config))
 
-    client_opts.update(clean_opts(args))
+    print args
+    for opt in CONF_OPTS:
+        try:
+            val = args.pop(opt)
+        except KeyError:
+            pass
+        else:
+            if val is not None:
+                conf[opt] = val
     
     client = CloudFilesClient(client_opts)
-    getattr(client, args['command'])(args)
+    command_fun = getattr(client, args.pop('command'))
+    args = dict((k,v) for k,v in args.items() if v not in (None, []))
+
+    command_fun(**args)
 
 
 if __name__ == '__main__':
