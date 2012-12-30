@@ -56,6 +56,8 @@ Files are hashed and compared with the server, so only files that differ from th
 
 After attaching a directory, you can make the contents of the container public by running `cloudpush.py publish`. If successful, the base URL of the directory will be returned.
 
+The publish command take an optional argument `--index` or `-i` to specify the file to serve when a directory is accessed (eg. `index.html`).
+
 ### Detach
 
 To detach a container from the current directory, *and delete the container*, run `cloudpush.py detach`. This recursively deletes all the files from the container, deletes the container, and then detaches the container from the directory.

@@ -102,10 +102,13 @@ class CloudFilesClient(object):
                 push_files = [push_path]
 
             for filename in push_files:
+                print 'Processing file %s' % filename
                 if filename in objects:
+                    print 'File exists on server'
                     remote_hash = objects[filename]['hash']
                     local_hash = md5_file(filename)
                     if local_hash == remote_hash:
+                        print 'File is same on server'
                         skipped += 1
                         continue
 
@@ -150,10 +153,14 @@ class CloudFilesClient(object):
         return 'Container Created'
 
     @command
-    def publish(self):
+    def publish(self, index=None):
         container = self.container
 
         container.make_public(ttl=self.cache_timeout)
+
+        if index:
+            container.enable_static_web(index)
+
         return self.url()
 
     @command
@@ -211,6 +218,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=COMMANDS)
     parser.add_argument('--container', '-c')
+    parser.add_argument('--index', '-i')
     parser.add_argument('files', nargs='*')
 
     args = vars(parser.parse_args())
