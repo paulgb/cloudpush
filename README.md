@@ -22,7 +22,7 @@ CloudPush can be configured in one of two ways. In both cases the configurable v
 
 ### File-based Configuration
 
-Configuraition m be provided by a file called `.cloudpush` in the user's home directory.
+Configuraition can be provided by a file called `.cloudpush` in the user's home directory.
 
 An example file looks like this:
 
