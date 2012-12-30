@@ -11,12 +11,12 @@ Configuration
 
 CloudPush can be configured in one of two ways. In both cases the configurable variables are the same:
 
-* `username` -- your username
-* `api_key` -- your API key
-* `cache_timeout` -- amount of time files live in the CDN, in seconds
-* `authurl` -- the authorization URL (defaults to Cloud Files US, you only need to change this if you use Cloud Files UK or another Swift server.)
+* `username`: your username
+* `api_key`: your API key
+* `cache_timeout`: amount of time files live in the CDN, in seconds
+* `authurl`: the authorization URL (defaults to Cloud Files US, you only need to change this if you use Cloud Files UK or another Swift server.)
 
-## File-based Configuration
+### File-based Configuration
 
 Configuraition m be provided by a file called `.cloudpush` in the user's home directory.
 
@@ -27,7 +27,7 @@ An example file looks like this:
         "api_key": "<your api key>"
     }
 
-## Environment-based configuration
+### Environment-based configuration
 
 CloudPush will also look through the environment for configuraiton settings. The environment variables are uppercase and prefixed with `CLOUDFILES_`.
 
@@ -38,25 +38,25 @@ CloudPush will also look through the environment for configuraiton settings. The
 Usage
 -----
 
-## Attach
+### Attach
 
 CloudPush works by attaching a directory to a Swift container. The first time you run CloudPush in a directory, you must run `cloudpush attach` to create a container and attach it to the current directory.
 
-## Push
+### Push
 
 To push local files to the server, run `cloudpush push [filename...]`. This pushes the named files (and, recursively, directories) to the server. If no filename is given, the whole directory will be pushed.
 
 Files are hashed and compared with the server, so only files that differ from the version on the server will be pushed. Note that last modified dates are not compared and the synchronization is only one-way.
 
-## Publish
+### Publish
 
 After attaching a directory, you can make the contents of the container public by running `cloudpush publish`. If successful, the base URL of the directory will be returned.
 
-## Detach
+### Detach
 
 To detach a container from the current directory, *and delete the container*, run `cloudpush detach`. This recursively deletes all the files from the container, deletes the container, and then detaches the container from the directory.
 
-## Info
+### Info
 
 CloudPush also has an info command (`cloudpush info`) which returns some values related to the currently attached container. This includes the CDN url (if public) and a token that can be used to manually make `REST` API calls to the server.
 
