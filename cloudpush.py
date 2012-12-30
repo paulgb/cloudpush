@@ -136,9 +136,10 @@ class CloudFilesClient(object):
             container_name = site_config['container']
         elif container:
             container_name = container
-            site_config['container'] = container_name
         else:
             parent_dir, container_name = path.split(path.realpath('.'))
+        
+        site_config['container'] = container_name
 
         try:
             self.connection.create_container(site_config['container'], True)
