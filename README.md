@@ -40,25 +40,25 @@ Usage
 
 ### Attach
 
-CloudPush works by attaching a directory to a Swift container. The first time you run CloudPush in a directory, you must run `cloudpush attach` to create a container and attach it to the current directory.
+CloudPush works by attaching a directory to a Swift container. The first time you run CloudPush in a directory, you must run `cloudpush.py attach` to create a container and attach it to the current directory.
 
 ### Push
 
-To push local files to the server, run `cloudpush push [filename...]`. This pushes the named files (and, recursively, directories) to the server. If no filename is given, the whole directory will be pushed.
+To push local files to the server, run `cloudpush.py push [filename...]`. This pushes the named files (and, recursively, directories) to the server. If no filename is given, the whole directory will be pushed.
 
 Files are hashed and compared with the server, so only files that differ from the version on the server will be pushed. Note that last modified dates are not compared and the synchronization is only one-way.
 
 ### Publish
 
-After attaching a directory, you can make the contents of the container public by running `cloudpush publish`. If successful, the base URL of the directory will be returned.
+After attaching a directory, you can make the contents of the container public by running `cloudpush.py publish`. If successful, the base URL of the directory will be returned.
 
 ### Detach
 
-To detach a container from the current directory, *and delete the container*, run `cloudpush detach`. This recursively deletes all the files from the container, deletes the container, and then detaches the container from the directory.
+To detach a container from the current directory, *and delete the container*, run `cloudpush.py detach`. This recursively deletes all the files from the container, deletes the container, and then detaches the container from the directory.
 
 ### Info
 
-CloudPush also has an info command (`cloudpush info`) which returns some values related to the currently attached container. This includes the CDN url (if public) and a token that can be used to manually make `REST` API calls to the server.
+CloudPush also has an info command (`cloudpush.py info`) which returns some values related to the currently attached container. This includes the CDN url (if public) and a token that can be used to manually make `REST` API calls to the server.
 
 A note on CDN hosting
 ---------------------

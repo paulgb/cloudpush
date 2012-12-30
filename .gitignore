@@ -2,3 +2,6 @@ testconfig.json
 env
 .*.swp
 *.pyc
+build/
+cloudpush.egg-info/
+dist/
