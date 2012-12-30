@@ -5,3 +5,4 @@ env
 build/
 cloudpush.egg-info/
 dist/
+test/tmp/

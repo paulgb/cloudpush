@@ -1,6 +1,6 @@
 
 import unittest
-import cloudpush
+from cloudpush import cloudpush
 from random import choice
 from shutil import copytree, rmtree
 from os import path
