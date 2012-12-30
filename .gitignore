@@ -1,2 +1,4 @@
 testconfig.json
 env
+.*.swp
+*.pyc
