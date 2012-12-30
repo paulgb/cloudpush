@@ -1,5 +1,6 @@
 
 import cloudfiles
+from cloudfiles.errors import AuthenticationFailed
 import argparse
 from os import environ, path, walk, chdir
 import json
@@ -8,10 +9,11 @@ from StringIO import StringIO
 from hashlib import md5
 
 COMMANDS = []
-CONF_OPTS = ('username', 'api_key', 'cache_timeout', 'authurl')
+CONFIG_OPTS = ('username', 'api_key', 'cache_timeout', 'authurl')
 MD5_BLOCKSIZE = 128
 
 CONFIG_FILE = '.cloudpush'
+CONFIG_PREFIX = 'CLOUDFILES_'
 BASE_CONFIG_FILE = path.expanduser(path.join('~', CONFIG_FILE))
 DEFAULT_CACHE_TIMEOUT = 10 * 60
 DEFAULT_AUTH_URL = cloudfiles.us_authurl
@@ -121,6 +123,7 @@ class CloudFilesClient(object):
         self.connection.delete_container(self.container_name)
         del site_config['container']
         self.save_site_config()
+        return 'Container deleted'
 
     @command
     def attach(self, container=None):
@@ -129,19 +132,21 @@ class CloudFilesClient(object):
         if 'container' in site_config:
             print 'Already attached to %s' % site_config['container']
             if container:
-                raise NotImplementedError()
+                return 'Can\'t attach another container'
             container_name = site_config['container']
         elif container:
             container_name = container
+            site_config['container'] = container_name
         else:
             parent_dir, container_name = path.split(path.realpath('.'))
-        site_config['container'] = container_name
-        self.save_site_config()
 
         try:
             self.connection.create_container(site_config['container'], True)
+
+            self.save_site_config()
         except cloudfiles.errors.ContainerExists:
             print 'Container %s already exists' % site_config['container']
+        return 'Container Created'
 
     @command
     def publish(self):
@@ -181,12 +186,24 @@ def md5_file(filename):
     return hash.hexdigest()
 
 
-def clean_opts(opts):
+def clean_opts(opts, prefix='', upper=False):
     r'''
-        >>> clean_opts({'username': 'baz', 'foo': 'bar'})
-        {'username': 'baz'}
+        >>> clean_opts({'username': 'baz',
+        ...   'foo': 'bar',
+        ...   'api_key': 'bam'})
+        {'username': 'baz', 'api_key': 'bam'}
+        >>> clean_opts({'PFX_USERNAME': 'baz',
+        ...   'PFX_FOO': 'bar',
+        ...   'PFX_API_KEY': 'bam'}, 'PFX_', True)
+        {'username': 'baz', 'api_key': 'bam'}
     '''
-    return dict((k,v) for k,v in opts.items() if k in CONF_OPTS and v is not None)
+    d = dict()
+    for valid_opt in CONFIG_OPTS:
+        env_opt = prefix + (valid_opt, valid_opt.upper())[upper]
+        if env_opt in opts:
+            d[valid_opt] = opts[env_opt]
+
+    return d
 
 
 def main():
@@ -197,8 +214,10 @@ def main():
 
     args = vars(parser.parse_args())
 
-    client_opts = clean_opts(environ)
+    # Load configuration from environment variables
+    client_opts = clean_opts(environ, CONFIG_PREFIX, True)
 
+    # Load configuration from home folder
     try:
         config = json.load(file(BASE_CONFIG_FILE))
     except IOError:
@@ -206,7 +225,7 @@ def main():
     else:
         client_opts.update(clean_opts(config))
 
-    for opt in CONF_OPTS:
+    for opt in CONFIG_OPTS:
         try:
             val = args.pop(opt)
         except KeyError:
@@ -215,11 +234,21 @@ def main():
             if val is not None:
                 conf[opt] = val
     
-    client = CloudFilesClient(client_opts)
+    try:
+        client = CloudFilesClient(client_opts)
+    except InvalidConfigurationError:
+        print 'Invalid configuration: username or API key not set'
+        return
+
     command_fun = getattr(client, args.pop('command'))
     args = dict((k,v) for k,v in args.items() if v not in (None, []))
 
-    print command_fun(**args)
+    try:
+        print command_fun(**args)
+    except AuthenticationFailed:
+        print 'Authentication failed - check that username and API key are up to date'
+    except NotAttached:
+        print 'Not attached - attach this directory to a container first (see documentation)'
 
 
 if __name__ == '__main__':
