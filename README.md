@@ -6,6 +6,10 @@ CloudPush is a command-line tool for managing static websites hosted on [Rackspa
 Installation
 ------------
 
+Install [setuptools](http://pypi.python.org/pypi/setuptools) if it's not already on your system (if you've installed other Python packages, it's most likely already there).
+
+    $ python setup.py install
+
 Configuration
 -------------
 
@@ -31,8 +35,8 @@ An example file looks like this:
 
 CloudPush will also look through the environment for configuraiton settings. The environment variables are uppercase and prefixed with `CLOUDFILES_`.
 
-    export CLOUDFILES_USERNAME=<your username>
-    export CLOUDFILES_API_KEY=<your api key>
+    $ export CLOUDFILES_USERNAME=<your username>
+    $ export CLOUDFILES_API_KEY=<your api key>
 
 
 Usage
