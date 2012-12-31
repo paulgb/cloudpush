@@ -164,6 +164,14 @@ class CloudFilesClient(object):
         return self.url()
 
     @command
+    def purge(self, files):
+        container = self.container
+        for fn in files:
+            fl = self.container[fn]
+            fl.purge_from_cdn()
+        return 'File queued to purge'
+
+    @command
     def info(self):
         connection = self.connection
         return {'url': connection.connection_args,
